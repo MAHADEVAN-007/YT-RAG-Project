@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account - YT-RAG</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+        .navbar { background: #1e293b; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+        .navbar h2 { font-size: 1.25rem; }
+        .navbar .nav-links { display: flex; gap: 1rem; align-items: center; }
+        .navbar a, .navbar button { color: #94a3b8; text-decoration: none; font-size: .875rem; background: none; border: none; cursor: pointer; }
+        .navbar a:hover, .navbar button:hover { color: #e2e8f0; }
+        .container { max-width: 600px; margin: 2rem auto; padding: 0 1.5rem; }
+        .card { background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #334155; }
+        .card h3 { margin-bottom: 1rem; font-size: 1.1rem; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; font-size: .875rem; font-weight: 500; margin-bottom: .375rem; color: #cbd5e1; }
+        input { width: 100%; padding: .75rem; border: 1px solid #334155; border-radius: 8px; background: #0f172a; color: #e2e8f0; font-size: .875rem; outline: none; transition: border .2s; }
+        input:focus { border-color: #3b82f6; }
+        .btn { padding: .625rem 1.25rem; background: #3b82f6; color: #fff; border: none; border-radius: 8px; font-size: .875rem; font-weight: 600; cursor: pointer; transition: background .2s; }
+        .btn:hover { background: #2563eb; }
+        .error { color: #f87171; font-size: .8rem; margin-top: .375rem; display: none; }
+        .success { color: #4ade80; font-size: .875rem; margin-top: .5rem; display: none; }
+        .profile-info p { margin-bottom: .5rem; font-size: .875rem; color: #cbd5e1; }
+        .profile-info span { color: #e2e8f0; font-weight: 500; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h2>YT-RAG</h2>
+        <div class="nav-links">
+            <a href="/dashboard">Dashboard</a>
+            <button id="logoutBtn">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <h3>Account Info</h3>
+            <div class="profile-info" id="profileInfo"></div>
+        </div>
+
+        <div class="card">
+            <h3>Update Profile</h3>
+            <form id="updateForm">
+                <div class="form-group">
+                    <label for="upUsername">Username</label>
+                    <input type="text" id="upUsername">
+                </div>
+                <div class="form-group">
+                    <label for="upEmail">Email</label>
+                    <input type="email" id="upEmail">
+                </div>
+                <div class="error" id="updateError"></div>
+                <div class="success" id="updateSuccess"></div>
+                <button type="submit" class="btn">Save Changes</button>
+            </form>
+        </div>
+
+        <div class="card">
+            <h3>Change Password</h3>
+            <form id="changePasswordForm">
+                <div class="form-group">
+                    <label for="currentPassword">Current Password</label>
+                    <input type="password" id="currentPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="newPassword">New Password</label>
+                    <input type="password" id="newPassword" required minlength="8">
+                </div>
+                <div class="error" id="pwError"></div>
+                <div class="success" id="pwSuccess"></div>
+                <button type="submit" class="btn">Update Password</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function getToken() { return localStorage.getItem('token'); }
+
+        function getUserIdFromToken() {
+            const token = getToken();
+            if (!token) return null;
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                return payload.sub;
+            } catch { return null; }
+        }
+
+        async function apiCall(url, options = {}) {
+            const token = getToken();
+            const headers = { 'Content-Type': 'application/json', ...options.headers };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const res = await fetch(url, { ...options, headers });
+            if (res.status === 401) {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+                return null;
+            }
+            return res;
+        }
+
+        async function loadProfile() {
+            const userId = getUserIdFromToken();
+            if (!userId) {
+                window.location.href = '/login';
+                return;
+            }
+            const res = await apiCall(`/api/users/${userId}/account`);
+            if (!res) return;
+            const data = await res.json();
+            document.getElementById('profileInfo').innerHTML = `
+                <p>Username: <span>${data.username}</span></p>
+                <p>Email: <span>${data.email}</span></p>
+            `;
+            document.getElementById('upUsername').value = data.username;
+            document.getElementById('upEmail').value = data.email;
+            document.getElementById('updateForm').dataset.userId = data.id;
+        }
+
+        document.getElementById('updateForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userId = e.target.dataset.userId;
+            const errorEl = document.getElementById('updateError');
+            const successEl = document.getElementById('updateSuccess');
+            errorEl.style.display = 'none';
+            successEl.style.display = 'none';
+            const body = {};
+            const username = document.getElementById('upUsername').value;
+            const email = document.getElementById('upEmail').value;
+            if (username) body.username = username;
+            if (email) body.email = email;
+            const res = await apiCall(`/api/users/${userId}/update`, {
+                method: 'PATCH', body: JSON.stringify(body)
+            });
+            if (!res) return;
+            if (!res.ok) {
+                const data = await res.json();
+                errorEl.textContent = data.detail || 'Update failed';
+                errorEl.style.display = 'block';
+                return;
+            }
+            successEl.textContent = 'Profile updated';
+            successEl.style.display = 'block';
+            loadProfile();
+        });
+
+        document.getElementById('changePasswordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const userId = document.getElementById('updateForm').dataset.userId;
+            const errorEl = document.getElementById('pwError');
+            const successEl = document.getElementById('pwSuccess');
+            errorEl.style.display = 'none';
+            successEl.style.display = 'none';
+            const res = await apiCall(`/api/users/${userId}/account/change-password`, {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    current_password: document.getElementById('currentPassword').value,
+                    new_password: document.getElementById('newPassword').value
+                })
+            });
+            if (!res) return;
+            if (!res.ok) {
+                const data = await res.json();
+                errorEl.textContent = data.detail || 'Failed';
+                errorEl.style.display = 'block';
+                return;
+            }
+            successEl.textContent = 'Password changed';
+            successEl.style.display = 'block';
+            document.getElementById('currentPassword').value = '';
+            document.getElementById('newPassword').value = '';
+        });
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('token');
+            window.location.href = '/login';
+        });
+
+        loadProfile();
+    </script>
+</body>
+</html>

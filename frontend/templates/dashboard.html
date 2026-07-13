@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - YT-RAG</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+        .navbar { background: #1e293b; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+        .navbar h2 { font-size: 1.25rem; }
+        .navbar .nav-links { display: flex; gap: 1rem; align-items: center; }
+        .navbar a, .navbar button { color: #94a3b8; text-decoration: none; font-size: .875rem; background: none; border: none; cursor: pointer; }
+        .navbar a:hover, .navbar button:hover { color: #e2e8f0; }
+        .container { max-width: 900px; margin: 2rem auto; padding: 0 1.5rem; }
+        .card { background: #1e293b; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; border: 1px solid #334155; }
+        .card h3 { margin-bottom: 1rem; font-size: 1.1rem; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; font-size: .875rem; font-weight: 500; margin-bottom: .375rem; color: #cbd5e1; }
+        input, textarea { width: 100%; padding: .75rem; border: 1px solid #334155; border-radius: 8px; background: #0f172a; color: #e2e8f0; font-size: .875rem; outline: none; transition: border .2s; }
+        input:focus, textarea:focus { border-color: #3b82f6; }
+        textarea { resize: vertical; min-height: 100px; font-family: inherit; }
+        .btn { padding: .625rem 1.25rem; background: #3b82f6; color: #fff; border: none; border-radius: 8px; font-size: .875rem; font-weight: 600; cursor: pointer; transition: background .2s; }
+        .btn:hover { background: #2563eb; }
+        .btn-outline { background: transparent; border: 1px solid #334155; color: #94a3b8; }
+        .btn-outline:hover { background: #334155; color: #e2e8f0; }
+        .btn-danger { background: #ef4444; }
+        .btn-danger:hover { background: #dc2626; }
+        .result { margin-top: 1rem; padding: 1rem; background: #0f172a; border-radius: 8px; border: 1px solid #334155; display: none; white-space: pre-wrap; font-size: .875rem; line-height: 1.6; max-height: 400px; overflow-y: auto; }
+        .error { color: #f87171; font-size: .8rem; margin-top: .375rem; display: none; }
+        .success { color: #4ade80; font-size: .875rem; margin-top: .5rem; display: none; }
+        .profile-info p { margin-bottom: .5rem; font-size: .875rem; color: #cbd5e1; }
+        .profile-info span { color: #e2e8f0; font-weight: 500; }
+        .loading { display: none; text-align: center; color: #94a3b8; margin-top: 1rem; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <h2>YT-RAG</h2>
+        <div class="nav-links">
+            <a href="#" id="navProfile">Account</a>
+            <a href="#" id="navDashboard">Dashboard</a>
+            <button id="logoutBtn">Logout</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <div id="dashboardSection">
+            <div class="card">
+                <h3>Fetch YouTube Transcript</h3>
+                <form id="transcriptForm">
+                    <div class="form-group">
+                        <label for="ytUrl">YouTube URL</label>
+                        <input type="url" id="ytUrl" placeholder="https://www.youtube.com/watch?v=..." required>
+                    </div>
+                    <div class="error" id="transcriptError"></div>
+                    <button type="submit" class="btn">Fetch Transcript</button>
+                </form>
+                <div class="loading" id="transcriptLoading">Fetching transcript...</div>
+                <div class="result" id="transcriptResult"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = '';
+        function getToken() { return localStorage.getItem('token'); }
+
+        function getUserIdFromToken() {
+            const token = getToken();
+            if (!token) return null;
+            try {
+                const payload = JSON.parse(atob(token.split('.')[1]));
+                return payload.sub;
+            } catch { return null; }
+        }
+
+        async function apiCall(url, options = {}) {
+            const token = getToken();
+            const headers = { 'Content-Type': 'application/json', ...options.headers };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+            const res = await fetch(API + url, { ...options, headers });
+            if (res.status === 401) {
+                localStorage.removeItem('token');
+                window.location.href = '/login';
+                return null;
+            }
+            return res;
+        }
+
+        document.getElementById('transcriptForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const resultEl = document.getElementById('transcriptResult');
+            const errorEl = document.getElementById('transcriptError');
+            const loadingEl = document.getElementById('transcriptLoading');
+            resultEl.style.display = 'none';
+            errorEl.style.display = 'none';
+            loadingEl.style.display = 'block';
+            const url = document.getElementById('ytUrl').value;
+            try {
+                const res = await apiCall('/api/youtube/transcript', {
+                    method: 'POST',
+                    body: JSON.stringify({ url })
+                });
+                loadingEl.style.display = 'none';
+                if (!res) return;
+                if (!res.ok) {
+                    const data = await res.json();
+                    errorEl.textContent = data.detail || 'Failed';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                const data = await res.json();
+                resultEl.textContent = `Video ID: ${data.video_id}\nSegments: ${data.segments.length}\n\n${data.full_text}`;
+                resultEl.style.display = 'block';
+            } catch {
+                loadingEl.style.display = 'none';
+                errorEl.textContent = 'Network error';
+                errorEl.style.display = 'block';
+            }
+        });
+
+
+
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            localStorage.removeItem('token');
+            window.location.href = '/login';
+        });
+
+        document.getElementById('navProfile').addEventListener('click', (e) => {
+            e.preventDefault();
+            window.location.href = '/account';
+        });
+    </script>
+</body>
+</html>

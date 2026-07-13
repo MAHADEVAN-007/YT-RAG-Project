@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YT-RAG</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+.auth-page{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:2rem}
+.auth-box{background:#1e293b;border-radius:1rem;padding:2.5rem;width:100%;max-width:420px;box-shadow:0 25px 50px -12px rgba(0,0,0,.5)}
+.auth-box h1{text-align:center;margin-bottom:.5rem;font-size:1.75rem}
+.subtitle{text-align:center;color:#94a3b8;margin-bottom:2rem;font-size:.9rem}
+.tabs{display:flex;gap:.5rem;margin-bottom:1.5rem}
+.tab{flex:1;padding:.6rem;text-align:center;border:1px solid #334155;border-radius:.5rem;cursor:pointer;background:transparent;color:#94a3b8;font-size:.9rem}
+.tab.active{background:#3b82f6;color:#fff;border-color:#3b82f6}
+.form-group{margin-bottom:1rem}
+.form-group label{display:block;margin-bottom:.4rem;font-size:.85rem;color:#94a3b8}
+.form-group input{width:100%;padding:.7rem .9rem;background:#0f172a;border:1px solid #334155;border-radius:.5rem;color:#e2e8f0;font-size:.95rem;outline:none}
+.form-group input:focus{border-color:#3b82f6}
+.btn{width:100%;padding:.7rem;background:#3b82f6;color:#fff;border:none;border-radius:.5rem;font-size:.95rem;cursor:pointer;font-weight:500}
+.btn:hover{background:#2563eb}
+.error{color:#ef4444;font-size:.85rem;margin-top:.5rem;text-align:center}
+.success{color:#22c55e;font-size:.85rem;margin-top:.5rem;text-align:center}
+.dashboard{min-height:100vh}
+.navbar{background:#1e293b;padding:1rem 2rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #334155}
+.brand{font-weight:700;font-size:1.2rem;color:#60a5fa}
+.user-info{display:flex;align-items:center;gap:1rem}
+.username{color:#94a3b8;font-size:.9rem}
+.btn-sm{padding:.4rem 1rem;background:#ef4444;color:#fff;border:none;border-radius:.4rem;cursor:pointer;font-size:.8rem}
+.content{max-width:900px;margin:2rem auto;padding:0 2rem}
+.card{background:#1e293b;border-radius:.75rem;padding:1.5rem;margin-bottom:1.5rem}
+.card h2{font-size:1.1rem;margin-bottom:1rem}
+.url-row,.query-row{display:flex;gap:.5rem}
+.url-row input,.query-row input{flex:1;padding:.7rem .9rem;background:#0f172a;border:1px solid #334155;border-radius:.5rem;color:#e2e8f0;font-size:.95rem;outline:none}
+.url-row input:focus,.query-row input:focus{border-color:#3b82f6}
+.url-row .btn,.query-row .btn{width:auto;padding:.7rem 1.5rem;white-space:nowrap}
+.transcript-box{background:#0f172a;border-radius:.5rem;padding:1rem;max-height:300px;overflow-y:auto;font-size:.85rem;line-height:1.6;color:#cbd5e1;white-space:pre-wrap;margin-top:.5rem}
+.answer-box{background:#0f172a;border-radius:.5rem;padding:1rem;font-size:.9rem;line-height:1.6;color:#cbd5e1;margin-top:.5rem;display:none}
+.answer-box.show{display:block}
+.hidden{display:none}
+.meta{font-size:.8rem;color:#64748b;margin-top:.5rem}
+.loading{text-align:center;color:#94a3b8;padding:1rem}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const API = '';
+let token = localStorage.getItem('token') || null;
+
+async function api(path, opts = {}) {
+  const h = { 'Content-Type': 'application/json' };
+  if (token) h['Authorization'] = 'Bearer ' + token;
+  const r = await fetch(API + path, { ...opts, headers: h });
+  if (r.status === 204) return null;
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.detail || 'Request failed');
+  return d;
+}
+
+function render() {
+  const el = document.getElementById('app');
+  if (token) renderDashboard(el);
+  else renderAuth(el);
+}
+
+function renderAuth(el) {
+  let login = true, err = '';
+  function html() {
+    return `<div class="auth-page"><div class="auth-box">
+      <h1>YT-RAG</h1>
+      <p class="subtitle">Paste. Ask. Get answers from any YouTube video.</p>
+      <div class="tabs">
+        <div class="tab${login?' active':''}" onclick="sw(1)">Login</div>
+        <div class="tab${login?'':' active'}" onclick="sw(0)">Register</div>
+      </div>
+      ${err ? `<div class="${err.includes('Registered')?'success':'error'}">${err}</div>` : ''}
+      <form onsubmit="sa(event)">
+        <div class="form-group"><label>Username</label><input type="text" id="u" required></div>
+        <div class="form-group"><label>${login?'Password':'Email'}</label><input type="${login?'password':'email'}" id="e" required></div>
+        ${login?'':`<div class="form-group"><label>Password</label><input type="password" id="p" required></div>`}
+        <button class="btn">${login?'Login':'Register'}</button>
+      </form>
+    </div></div>`;
+  }
+  window.sw = v => { login = !!v; err = ''; el.innerHTML = html(); };
+  window.sa = async e => {
+    e.preventDefault();
+    const username = document.getElementById('u').value;
+    if (login) {
+      try {
+        const r = await fetch('/api/users/login', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({username, password: document.getElementById('e').value})
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.detail || 'Login failed');
+        token = d.access_token;
+        localStorage.setItem('token', token);
+        render();
+      } catch(e) { err = e.message; el.innerHTML = html(); }
+    } else {
+      try {
+        await api('/api/users/register', {
+          method: 'POST',
+          body: JSON.stringify({username, email: document.getElementById('e').value, password: document.getElementById('p').value})
+        });
+        login = true; err = 'Registered! Please login.'; el.innerHTML = html();
+      } catch(e) { err = e.message; el.innerHTML = html(); }
+    }
+  };
+  el.innerHTML = html();
+}
+
+function renderDashboard(el) {
+  let vid = '', text = '', loading = false, ans = '', user = null;
+  api('/dashboard').then(u => user = u).catch(() => {});
+  function html() {
+    return `<div class="dashboard">
+      <nav class="navbar"><span class="brand">YT-RAG</span>
+        <div class="user-info"><span class="username" id="un">${user?user.username:'...'}</span>
+        <button class="btn-sm" onclick="lg()">Logout</button></div>
+      </nav>
+      <div class="content">
+        <div class="card"><h2>YouTube Transcript</h2>
+          <div class="url-row"><input type="text" id="yt" placeholder="Paste YouTube URL...">
+          <button class="btn" onclick="ft()" id="fb">Fetch</button></div>
+          ${loading?'<div class="loading">Fetching transcript...</div>':''}
+          <div class="meta" id="mi"></div>
+          <div class="transcript-box" id="tb" style="${text?'':'display:none'}">${text}</div>
+        </div>
+        <div class="card"><h2>Ask a Question</h2>
+          <div class="query-row"><input type="text" id="q" placeholder="Ask about the video..." ${!vid?'disabled':''}>
+          <button class="btn" onclick="aq()" id="qb" ${!vid?'disabled':''}>Ask</button></div>
+          <div class="answer-box${ans?' show':''}" id="ab">${ans}</div>
+        </div>
+      </div>
+    </div>`;
+  }
+  window.lg = () => { token = null; localStorage.removeItem('token'); render(); };
+  window.ft = async () => {
+    const url = document.getElementById('yt').value;
+    if (!url) return;
+    loading = true;
+    document.getElementById('fb').disabled = true;
+    document.getElementById('fb').textContent = 'Fetching...';
+    el.innerHTML = html();
+    try {
+      const d = await api('/api/youtube/transcript', {method:'POST',body:JSON.stringify({url})});
+      vid = d.video_id; text = d.full_text;
+      document.getElementById('mi').textContent = d.video_id+' | '+d.segments.length+' segments | '+text.length+' chars';
+      document.getElementById('tb').style.display = 'block';
+      document.getElementById('tb').textContent = text;
+      document.getElementById('q').disabled = false;
+      document.getElementById('qb').disabled = false;
+    } catch(e) { alert('Error: '+e.message); }
+    loading = false;
+    document.getElementById('fb').disabled = false;
+    document.getElementById('fb').textContent = 'Fetch';
+  };
+  window.aq = async () => {
+    const q = document.getElementById('q').value;
+    if (!q || !vid) return;
+    document.getElementById('qb').disabled = true;
+    document.getElementById('qb').textContent = 'Asking...';
+    document.getElementById('ab').classList.add('show');
+    document.getElementById('ab').textContent = 'Thinking...';
+    try {
+      const d = await api('/api/query', {method:'POST',body:JSON.stringify({video_id:vid,question:q})});
+      document.getElementById('ab').textContent = d.answer;
+    } catch(e) { document.getElementById('ab').textContent = 'Error: '+e.message; }
+    document.getElementById('qb').disabled = false;
+    document.getElementById('qb').textContent = 'Ask';
+  };
+  el.innerHTML = html();
+  api('/dashboard').then(u => {
+    user = u;
+    const label = document.getElementById('un');
+    if (label) label.textContent = u.username;
+  }).catch(() => {});
+}
+
+render();
+</script>
+</body>
+</html>

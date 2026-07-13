@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - YT-RAG</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .container { background: #1e293b; padding: 2.5rem; border-radius: 12px; width: 100%; max-width: 400px; box-shadow: 0 4px 24px rgba(0,0,0,.3); }
+        h1 { text-align: center; margin-bottom: .5rem; font-size: 1.5rem; }
+        .subtitle { text-align: center; color: #94a3b8; font-size: .875rem; margin-bottom: 1.5rem; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; font-size: .875rem; font-weight: 500; margin-bottom: .375rem; color: #cbd5e1; }
+        input { width: 100%; padding: .75rem; border: 1px solid #334155; border-radius: 8px; background: #0f172a; color: #e2e8f0; font-size: .875rem; outline: none; transition: border .2s; }
+        input:focus { border-color: #3b82f6; }
+        .btn { width: 100%; padding: .75rem; background: #3b82f6; color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; transition: background .2s; margin-top: .5rem; }
+        .btn:hover { background: #2563eb; }
+        .error { color: #f87171; font-size: .8rem; margin-top: .375rem; display: none; }
+        .footer { text-align: center; margin-top: 1rem; font-size: .875rem; color: #94a3b8; }
+        .footer a { color: #3b82f6; text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome Back</h1>
+        <p class="subtitle">Login to your YT-RAG account</p>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" placeholder="Your username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter password" required>
+            </div>
+            <div class="error" id="errorMsg"></div>
+            <button type="submit" class="btn">Login</button>
+        </form>
+        <div class="footer" style="display:flex; flex-direction:column; gap:.5rem;">
+            <a href="/login/forgot-password">Forgot password?</a>
+            <span>Don't have an account? <a href="/register">Register</a></span>
+        </div>
+    </div>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errorEl = document.getElementById('errorMsg');
+            errorEl.style.display = 'none';
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            try {
+                const res = await fetch('/api/users/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                if (!res.ok) {
+                    const data = await res.json();
+                    errorEl.textContent = data.detail || 'Login failed';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                const data = await res.json();
+                localStorage.setItem('token', data.access_token);
+                window.location.href = '/dashboard';
+            } catch (err) {
+                errorEl.textContent = 'Network error';
+                errorEl.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
